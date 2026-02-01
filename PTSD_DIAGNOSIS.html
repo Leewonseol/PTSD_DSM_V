@@ -1,0 +1,333 @@
+import React, { useState, useCallback } from 'react';
+
+const PTSDDecisionTree = () => {
+  const [criteria, setCriteria] = useState({
+    a: true,
+    b: 2,
+    c: 1,
+    d: 3,
+    e: 2,
+    f: true,
+    g: true,
+    h: true
+  });
+
+  // 각 기준 충족 여부 계산
+  const checkCriteria = useCallback(() => {
+    const met = {
+      a: criteria.a,
+      b: criteria.b >= 1,
+      c: criteria.c >= 1,
+      d: criteria.d >= 2,
+      e: criteria.e >= 2,
+      f: criteria.f,
+      g: criteria.g,
+      h: criteria.h
+    };
+
+    // 순차적 평가 - 어디서 멈추는지 확인
+    const sequence = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+    let stoppedAt = null;
+    let allMet = true;
+
+    for (const key of sequence) {
+      if (!met[key]) {
+        stoppedAt = key;
+        allMet = false;
+        break;
+      }
+    }
+
+    return { met, stoppedAt, allMet };
+  }, [criteria]);
+
+  const { met, stoppedAt, allMet } = checkCriteria();
+
+  // 노드가 활성화되어 있는지 확인
+  const isActive = (nodeKey) => {
+    const sequence = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+    const nodeIndex = sequence.indexOf(nodeKey);
+    
+    for (let i = 0; i < nodeIndex; i++) {
+      if (!met[sequence[i]]) return false;
+    }
+    return true;
+  };
+
+  // 노드 스타일
+  const getNodeStyle = (nodeKey, isEndpoint = false) => {
+    const active = isActive(nodeKey);
+    const isMet = met[nodeKey];
+    
+    if (!active) {
+      return 'bg-gray-200 text-gray-400 border-gray-300';
+    }
+    if (isEndpoint) {
+      if (isMet) return 'bg-green-600 text-white border-green-700 shadow-lg';
+      return 'bg-red-500 text-white border-red-600 shadow-lg';
+    }
+    if (isMet) return 'bg-green-100 text-green-800 border-green-400';
+    return 'bg-red-100 text-red-800 border-red-400';
+  };
+
+  // 엣지(화살표) 스타일
+  const getEdgeStyle = (fromKey, toKey, isYes) => {
+    const fromActive = isActive(fromKey);
+    const fromMet = met[fromKey];
+    
+    if (!fromActive) return 'stroke-gray-300';
+    if (isYes && fromMet) return 'stroke-green-600 stroke-2';
+    if (!isYes && !fromMet) return 'stroke-red-500 stroke-2';
+    return 'stroke-gray-300 stroke-dashed';
+  };
+
+  const criteriaInfo = {
+    a: { label: '기준 A', desc: '외상 사건 노출', type: 'boolean' },
+    b: { label: '기준 B', desc: '침습 증상', type: 'count', required: 1 },
+    c: { label: '기준 C', desc: '회피 증상', type: 'count', required: 1 },
+    d: { label: '기준 D', desc: '인지/감정 변화', type: 'count', required: 2 },
+    e: { label: '기준 E', desc: '각성/반응성 변화', type: 'count', required: 2 },
+    f: { label: '기준 F', desc: '지속 기간 > 1개월', type: 'boolean' },
+    g: { label: '기준 G', desc: '기능적 장해', type: 'boolean' },
+    h: { label: '기준 H', desc: '배제 기준 충족', type: 'boolean' }
+  };
+
+  const TreeNode = ({ nodeKey, x, y }) => {
+    const info = criteriaInfo[nodeKey];
+    const active = isActive(nodeKey);
+    const isMet = met[nodeKey];
+    
+    return (
+      <g transform={`translate(${x}, ${y})`}>
+        <foreignObject x="-70" y="-40" width="140" height="80">
+          <div className={`p-2 rounded-lg border-2 text-center text-xs ${getNodeStyle(nodeKey)}`}>
+            <div className="font-bold">{info.label}</div>
+            <div className="text-xs opacity-80">{info.desc}</div>
+            {info.type === 'count' && (
+              <div className="text-xs mt-1">
+                (필요: ≥{info.required}, 현재: {criteria[nodeKey]})
+              </div>
+            )}
+            <div className="mt-1 font-semibold">
+              {active ? (isMet ? '✓ 충족' : '✗ 미충족') : '-'}
+            </div>
+          </div>
+        </foreignObject>
+      </g>
+    );
+  };
+
+  const FailNode = ({ nodeKey, x, y }) => {
+    const isThisFailure = stoppedAt === nodeKey;
+    
+    return (
+      <g transform={`translate(${x}, ${y})`}>
+        <foreignObject x="-55" y="-25" width="110" height="50">
+          <div className={`p-2 rounded-lg border-2 text-center text-xs
+            ${isThisFailure ? 'bg-red-500 text-white border-red-600 shadow-lg' : 'bg-gray-100 text-gray-400 border-gray-300'}`}>
+            <div className="font-bold">진단 미충족</div>
+            <div className="text-xs">(기준 {nodeKey.toUpperCase()} 미충족)</div>
+          </div>
+        </foreignObject>
+      </g>
+    );
+  };
+
+  const Arrow = ({ x1, y1, x2, y2, fromKey, isYes, label }) => {
+    const midX = (x1 + x2) / 2;
+    const midY = (y1 + y2) / 2;
+    const styleClass = getEdgeStyle(fromKey, null, isYes);
+    
+    return (
+      <g>
+        <defs>
+          <marker id={`arrowhead-${fromKey}-${isYes}`} markerWidth="10" markerHeight="7" 
+            refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" className={styleClass.replace('stroke-', 'fill-')} />
+          </marker>
+        </defs>
+        <line 
+          x1={x1} y1={y1} x2={x2} y2={y2}
+          className={styleClass}
+          markerEnd={`url(#arrowhead-${fromKey}-${isYes})`}
+          strokeDasharray={styleClass.includes('dashed') ? '5,5' : '0'}
+        />
+        <text x={midX} y={midY - 5} textAnchor="middle" className="text-xs fill-gray-600">
+          {label}
+        </text>
+      </g>
+    );
+  };
+
+  return (
+    <div className="p-4 bg-gray-50 min-h-screen">
+      <h1 className="text-2xl font-bold text-center mb-4 text-gray-800">
+        PTSD 진단 결정 트리 (DSM-5 기준)
+      </h1>
+      
+      {/* 입력 컨트롤 */}
+      <div className="bg-white rounded-xl shadow-md p-4 mb-6 max-w-4xl mx-auto">
+        <h2 className="text-lg font-semibold mb-3 text-gray-700">진단 기준 입력</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {Object.entries(criteriaInfo).map(([key, info]) => (
+            <div key={key} className="flex flex-col">
+              <label className="text-sm font-medium text-gray-600 mb-1">
+                {info.label}: {info.desc}
+              </label>
+              {info.type === 'boolean' ? (
+                <select
+                  value={criteria[key] ? 'true' : 'false'}
+                  onChange={(e) => setCriteria({...criteria, [key]: e.target.value === 'true'})}
+                  className="border rounded-md p-2 text-sm"
+                >
+                  <option value="true">충족</option>
+                  <option value="false">미충족</option>
+                </select>
+              ) : (
+                <input
+                  type="number"
+                  min="0"
+                  max="10"
+                  value={criteria[key]}
+                  onChange={(e) => setCriteria({...criteria, [key]: parseInt(e.target.value) || 0})}
+                  className="border rounded-md p-2 text-sm"
+                />
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 결과 표시 */}
+      <div className={`text-center p-4 rounded-xl mb-6 max-w-4xl mx-auto ${
+        allMet ? 'bg-green-100 border-2 border-green-500' : 'bg-red-100 border-2 border-red-400'
+      }`}>
+        <span className="text-xl font-bold">
+          {allMet ? '✓ PTSD 진단 (모든 기준 충족)' : `✗ PTSD 진단 기준 미충족 (기준 ${stoppedAt?.toUpperCase()}에서 중단)`}
+        </span>
+      </div>
+
+      {/* 트리 시각화 */}
+      <div className="bg-white rounded-xl shadow-md p-4 overflow-x-auto max-w-6xl mx-auto">
+        <svg width="1000" height="700" className="mx-auto">
+          {/* 시작 노드 */}
+          <g transform="translate(500, 30)">
+            <ellipse cx="0" cy="0" rx="60" ry="20" className="fill-blue-500 stroke-blue-600" />
+            <text x="0" y="5" textAnchor="middle" className="fill-white text-sm font-bold">시작</text>
+          </g>
+
+          {/* 메인 경로 노드들 */}
+          <TreeNode nodeKey="a" x={500} y={100} />
+          <TreeNode nodeKey="b" x={500} y={180} />
+          <TreeNode nodeKey="c" x={500} y={260} />
+          <TreeNode nodeKey="d" x={500} y={340} />
+          <TreeNode nodeKey="e" x={500} y={420} />
+          <TreeNode nodeKey="f" x={500} y={500} />
+          <TreeNode nodeKey="g" x={500} y={580} />
+          <TreeNode nodeKey="h" x={500} y={660} />
+
+          {/* 실패 노드들 */}
+          <FailNode nodeKey="a" x={700} y={100} />
+          <FailNode nodeKey="b" x={700} y={180} />
+          <FailNode nodeKey="c" x={700} y={260} />
+          <FailNode nodeKey="d" x={700} y={340} />
+          <FailNode nodeKey="e" x={700} y={420} />
+          <FailNode nodeKey="f" x={700} y={500} />
+          <FailNode nodeKey="g" x={700} y={580} />
+          <FailNode nodeKey="h" x={700} y={660} />
+
+          {/* 성공 노드 */}
+          <g transform="translate(300, 660)">
+            <foreignObject x="-70" y="-30" width="140" height="60">
+              <div className={`p-3 rounded-lg border-2 text-center ${
+                allMet ? 'bg-green-600 text-white border-green-700 shadow-lg' : 'bg-gray-100 text-gray-400 border-gray-300'
+              }`}>
+                <div className="font-bold">✓ PTSD 진단</div>
+                <div className="text-xs">모든 기준 충족</div>
+              </div>
+            </foreignObject>
+          </g>
+
+          {/* 화살표들 */}
+          {/* 시작 -> A */}
+          <Arrow x1={500} y1={50} x2={500} y2={60} fromKey="start" isYes={true} label="" />
+          
+          {/* A -> B (Yes) / A -> Fail (No) */}
+          <Arrow x1={500} y1={140} x2={500} y2={140} fromKey="a" isYes={true} label="Yes" />
+          <Arrow x1={570} y1={100} x2={645} y2={100} fromKey="a" isYes={false} label="No" />
+          
+          {/* B -> C / Fail */}
+          <Arrow x1={500} y1={220} x2={500} y2={220} fromKey="b" isYes={true} label="Yes" />
+          <Arrow x1={570} y1={180} x2={645} y2={180} fromKey="b" isYes={false} label="No" />
+          
+          {/* C -> D / Fail */}
+          <Arrow x1={500} y1={300} x2={500} y2={300} fromKey="c" isYes={true} label="Yes" />
+          <Arrow x1={570} y1={260} x2={645} y2={260} fromKey="c" isYes={false} label="No" />
+          
+          {/* D -> E / Fail */}
+          <Arrow x1={500} y1={380} x2={500} y2={380} fromKey="d" isYes={true} label="Yes" />
+          <Arrow x1={570} y1={340} x2={645} y2={340} fromKey="d" isYes={false} label="No" />
+          
+          {/* E -> F / Fail */}
+          <Arrow x1={500} y1={460} x2={500} y2={460} fromKey="e" isYes={true} label="Yes" />
+          <Arrow x1={570} y1={420} x2={645} y2={420} fromKey="e" isYes={false} label="No" />
+          
+          {/* F -> G / Fail */}
+          <Arrow x1={500} y1={540} x2={500} y2={540} fromKey="f" isYes={true} label="Yes" />
+          <Arrow x1={570} y1={500} x2={645} y2={500} fromKey="f" isYes={false} label="No" />
+          
+          {/* G -> H / Fail */}
+          <Arrow x1={500} y1={620} x2={500} y2={620} fromKey="g" isYes={true} label="Yes" />
+          <Arrow x1={570} y1={580} x2={645} y2={580} fromKey="g" isYes={false} label="No" />
+          
+          {/* H -> Success / Fail */}
+          <Arrow x1={430} y1={660} x2={370} y2={660} fromKey="h" isYes={true} label="Yes" />
+          <Arrow x1={570} y1={660} x2={645} y2={660} fromKey="h" isYes={false} label="No" />
+
+          {/* 연결선 (세로) */}
+          <line x1={500} y1={50} x2={500} y2={60} className="stroke-blue-500 stroke-2" />
+          {['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((key, i) => {
+            const y1 = 140 + i * 80;
+            const y2 = 140 + i * 80;
+            return (
+              <line 
+                key={key}
+                x1={500} y1={y1} x2={500} y2={y2 + 40}
+                className={isActive(key) && met[key] ? 'stroke-green-600 stroke-2' : 'stroke-gray-300'}
+              />
+            );
+          })}
+        </svg>
+      </div>
+
+      {/* 범례 */}
+      <div className="mt-6 max-w-4xl mx-auto bg-white rounded-xl shadow-md p-4">
+        <h3 className="font-semibold mb-2 text-gray-700">범례</h3>
+        <div className="flex flex-wrap gap-4 text-sm">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 bg-green-100 border-2 border-green-400 rounded"></div>
+            <span>기준 충족</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 bg-red-100 border-2 border-red-400 rounded"></div>
+            <span>기준 미충족</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 bg-gray-200 border-2 border-gray-300 rounded"></div>
+            <span>평가되지 않음</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 bg-green-600 border-2 border-green-700 rounded"></div>
+            <span>최종 진단</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 bg-red-500 border-2 border-red-600 rounded"></div>
+            <span>진단 미충족 (중단점)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default PTSDDecisionTree;
